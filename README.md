@@ -6,6 +6,6 @@ Updated mobile player, offline startup diagnostics, local-file retry and alterna
 
 Game source, modifications and licenses: HYPERSPACE-offline-sources.zip.
 
-Bookmark endpoint: https://cdn.jsdmirror.cn/gh/NOTTHATGUYKID/hyperspace@main/index.html
+Bookmark endpoint: https://cdn.bili33.top/gh/NOTTHATGUYKID/hyperspace@main/index.html
 
 Upload these files to the existing repository main branch. A local build does not update GitHub or the mirror automatically.
