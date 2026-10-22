@@ -164,7 +164,7 @@ function drawRanks(rows,label){$('#popularCaption').textContent=label;$('#popula
 async function refreshPopularity(){updateFeatured(localRanks('all'),'ON THIS DEVICE');drawRanks(localRanks(),'ON THIS DEVICE · CONFIRMED PLAY TIME');if(!serverOnline)return;try{const r=await fetch('/api/arcade/popular?window='+rankingWindow,{cache:'no-store'});if(!r.ok)throw Error();const d=await r.json();drawRanks(d.rows,'COMMUNITY · CONFIRMED PLAY TIME');if(rankingWindow==='all')updateFeatured(d.rows,'COMMUNITY');else{const all=await fetch('/api/arcade/popular?window=all',{cache:'no-store'});if(all.ok)updateFeatured((await all.json()).rows,'COMMUNITY')}}catch{$('#popularCaption').textContent='ON THIS DEVICE · COMMUNITY CONNECTION UNAVAILABLE'}}
 document.querySelectorAll('[data-window]').forEach(b=>b.onclick=()=>{rankingWindow=b.dataset.window;document.querySelectorAll('[data-window]').forEach(x=>x.classList.toggle('active',x===b));refreshPopularity()});
 function health(g,state,reason=''){gameHealth[g.id]={state,reason,at:Date.now()};save('hyper:game-health',gameHealth)}
-function resetPlay(){playConfirmed=false;sessionToken=null;clearTimeout(loadTimer);gameAbort?.abort();gameAbort=null;lastTick=performance.now();$('#confirmPlay').disabled=false;$('#confirmPlay').textContent='Game is working — start timer';$('#sessionClock').textContent='Not timing yet';}
+function resetPlay(){clearGameAssetBlobs();playConfirmed=false;sessionToken=null;clearTimeout(loadTimer);gameAbort?.abort();gameAbort=null;lastTick=performance.now();$('#confirmPlay').disabled=false;$('#confirmPlay').textContent='Game is working — start timer';$('#sessionClock').textContent='Not timing yet';}
 function showLoadProblem(message){recordLoadingEvent("problem",message);if(!activeGame)return;playConfirmed=false;sessionToken=null;$('#instructions').textContent=message+' Retry, or choose an alternate version below.';health(activeGame,'failed',message);$('#loadStatus').textContent='NEEDS ATTENTION';showGameRecovery(message);$('#retryGame').hidden=false;$('#alternateGame').disabled=!getAlternates(activeGame).length;$('#confirmPlay').disabled=false;$('#confirmPlay').textContent='Game is working — start timer';$('#sessionClock').textContent='Not timing yet'}
 function getAlternates(g){return games.filter(x=>x.id!==g.id&&titleKey(x.title)===titleKey(g.title)&&!x.external).sort((a,b)=>(gameHealth[a.id]?.state==='failed')-(gameHealth[b.id]?.state==='failed'))}
 function htmlWrapper(text,url,token){text=mirrorGameHtml(text);url=mirrorGameUrl(url);const base=/<base\b[^>]*\bhref\s*=/i.test(text)?'':'<base href="'+url.replaceAll('"','%22')+'">';const script=`<script>(()=>{const token=${JSON.stringify(token)};(${installGameStorageFallback.toString()})();(${installGameDiagnostics.toString()})(token);addEventListener('error',e=>{parent.postMessage({type:'hyper-game-error',token,message:String(e.message||'A game script failed').slice(0,160)},'*')});addEventListener('unhandledrejection',()=>{parent.postMessage({type:'hyper-game-error',token,message:'A game resource failed'},'*')});addEventListener('load',()=>{parent.postMessage({type:'hyper-document-loaded',token},'*')})})();<\/script>`;return /<head[^>]*>/i.test(text)?text.replace(/<head[^>]*>/i,m=>m+base+script):base+script+text}
@@ -188,7 +188,7 @@ if(offlineGamePages[g.id]){startOfflineGame(g,seq);return}
 if(g.id==='roblox-nowgg'){const box=document.createElement('div');box.className='cloud-notice';const h=document.createElement('h2');h.textContent=bookmarkMode?'Roblox · New tab required':'Roblox cloud play';const p=document.createElement('p');p.textContent=bookmarkMode?externalBookmarkWarning:'Roblox cloud play opens on now.gg in a new tab because now.gg blocks embedded players.';const a=document.createElement('a');a.className='primary';a.href='https://now.gg/apps/mini-games-rb/19911/rivals.html';a.target='_blank';a.rel='noopener';a.textContent='LAUNCH ROBLOX VIA RIVALS ↗';box.append(h,p,a);$('#frameArea').append(box);$('#loadStatus').textContent=bookmarkMode?'NOT PLAYABLE IN BOOKMARK':'NOW.GG · EXTERNAL PLAYER';$('#confirmPlay').disabled=true;$('#retryGame').hidden=true;$('#instructions').textContent='External Roblox play is not counted: this site cannot verify time spent in another tab.';return}
 if(g.external){const box=document.createElement('div');box.className='cloud-notice';const h=document.createElement('h2');h.textContent=g.title;const p=document.createElement('p');p.textContent=(needsNewTab(g)&&bookmarkMode?externalBookmarkWarning:g.instructions)||'Play on the creator’s site.';const a=document.createElement('a');a.href=g.url;a.target='_blank';a.rel='noopener';a.className='primary';a.textContent='Open game ↗';box.append(h,p,a);$('#frameArea').append(box);$('#loadStatus').textContent=needsNewTab(g)&&bookmarkMode?'NOT PLAYABLE IN BOOKMARK':'EXTERNAL PLAYER';$('#retryGame').hidden=true;$('#instructions').textContent='This provider does not allow embedded playback. External play time is not counted.';$('#confirmPlay').disabled=true;return}
 gameAbort=new AbortController();const abort=gameAbort;loadTimer=setTimeout(()=>{abort.abort();if(seq===launchSeq)showLoadProblem('The game has not confirmed that it loaded after 30 seconds.')},30000);
-try{let url=mirrorGameUrl(g.url);const directMatch=g.mode==='html'&&!compatibility&&!bookmarkMode&&url.match(/^https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^@]+)@([^/]+)\/(.+)$/);const useDocument=!!directMatch;if(useDocument){url='https://raw.githack.com/'+directMatch.slice(1).join('/');$('#external').href=url;$('#external').textContent='Open game in new tab ↗'}if(g.mode==='lumin'){await initLumin();const r=await deadline(Lumin.getGameUrl(g.remoteId));url=typeof r==='string'?r:r.url;if(!url?.startsWith('https://'))throw Error('Provider returned no playable URL');if(seq!==launchSeq)return;$('#external').href=url}let text;if(g.mode==='html'&&!useDocument){const candidates=[url];if(url.startsWith('https://cdn.jsdelivr.net/'))candidates.push(url.replace('https://cdn.jsdelivr.net/','https://fastly.jsdelivr.net/'));const loaded=await fetchGameDocument(candidates,abort.signal);text=loaded.text;url=loaded.url}
+try{let url=mirrorGameUrl(g.url);const directMatch=g.mode==='html'&&!compatibility&&!bookmarkMode&&url.match(/^https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^@]+)@([^/]+)\/(.+)$/);const useDocument=!!directMatch;if(useDocument){url='https://raw.githack.com/'+directMatch.slice(1).join('/');$('#external').href=url;$('#external').textContent='Open game in new tab ↗'}if(g.mode==='lumin'){await initLumin();const r=await deadline(Lumin.getGameUrl(g.remoteId));url=typeof r==='string'?r:r.url;if(!url?.startsWith('https://'))throw Error('Provider returned no playable URL');if(seq!==launchSeq)return;$('#external').href=url}let text;if(g.mode==='html'&&!useDocument){const candidates=[url];if(url.startsWith('https://cdn.jsdelivr.net/'))candidates.push(url.replace('https://cdn.jsdelivr.net/','https://fastly.jsdelivr.net/'));const loaded=await fetchGameDocument(candidates,abort.signal);url=loaded.url;text=await repairGameAssetTypes(loaded.text,url,abort.signal,seq)}
 if(seq!==launchSeq)return;const frame=document.createElement('iframe');frame.title=g.title;frame.allow='fullscreen; autoplay; gamepad';frame.allowFullscreen=true;frame.setAttribute('sandbox',g.mode==='html'&&!useDocument?'allow-scripts allow-forms allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-downloads':'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-popups-to-escape-sandbox');frame.onerror=()=>showLoadProblem('The provider could not be opened.');frame.onload=()=>{if(seq!==launchSeq)return;recordLoadingEvent("iframe-load","Frame load event; gameplay not verified");$('#loadStatus').textContent='DOCUMENT LOADED';$('#instructions').textContent=(g.instructions?g.instructions+' · ':'')+'Source: '+g.source+'. A loaded page does not prove the game is playable. Press “Game is working” once you can play; use “Not working” if it is blank or stuck.'};if(g.mode==='html'&&!useDocument)frame.srcdoc=htmlWrapper(text,url,frameToken);else frame.src=url;$('#frameArea').replaceChildren(frame)}catch(e){if(seq===launchSeq){clearTimeout(loadTimer);showLoadProblem(e.name==='AbortError'?'Loading stopped or timed out.':e.message)}}};
 addEventListener('message',e=>{const frame=$('#frameArea iframe');if(!frame||e.source!==frame.contentWindow||e.data?.token!==frameToken)return;if(e.data.type==='hyper-game-error'){if(playConfirmed){$('#instructions').textContent='A background script reported an error. If the game stops working, press Not working; otherwise your confirmed session continues.';return}clearTimeout(loadTimer);showLoadProblem('Game script error: '+String(e.data.message||'Unknown error').slice(0,160))}});
 $('#retryGame').onclick=()=>activeGame&&launch(activeGame);$('#notWorking').onclick=()=>{clearTimeout(loadTimer);showLoadProblem('Marked not working on this device.');refreshPopularity()};$('#alternateGame').onclick=tryNextGameVersion;
@@ -426,11 +426,63 @@ function installGameDiagnostics(token){
 }
 addEventListener('message',e=>{const frame=$('#frameArea iframe');if(!frame||e.source!==frame.contentWindow||!e.data||e.data.token!==frameToken)return;if(e.data.type==='hyper-diagnostic')recordLoadingEvent(e.data.kind,e.data.detail);else if(e.data.type==='hyper-game-error')recordLoadingEvent('game-error',e.data.message)});
 new MutationObserver(()=>recordLoadingEvent('status',$('#loadStatus').textContent)).observe($('#loadStatus'),{childList:true,characterData:true,subtree:true});
-function loadingReportText(){return JSON.stringify({reportVersion:1,build:'loading-report-2026-10-21',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
+function loadingReportText(){return JSON.stringify({reportVersion:1,build:'asset-types-2026-10-22',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
 function openLoadingReport(){const area=$('#loadingReportText');area.value=loadingReportText();$('#loadingReportCopyStatus').textContent='Tap Copy report, then paste it into this chat.';if(!$('#loadingReportDialog').open)$('#loadingReportDialog').showModal()}
 $('#loadingReport').onclick=openLoadingReport;
 $('#closeLoadingReport').onclick=()=>$('#loadingReportDialog').close();
 $('#copyLoadingReport').onclick=async()=>{const area=$('#loadingReportText');try{await navigator.clipboard.writeText(area.value);$('#loadingReportCopyStatus').textContent='Copied. Paste the report into this chat.'}catch{area.focus();area.select();area.setSelectionRange(0,area.value.length);$('#loadingReportCopyStatus').textContent='Automatic copying is unavailable. Press and hold the selected text, choose Copy, then paste it into this chat.'}};
 new MutationObserver(()=>{const recovery=$('#gameRecovery');if(recovery&&!recovery.querySelector('[data-loading-report]')){const b=document.createElement('button');b.className='quiet';b.dataset.loadingReport='true';b.textContent='Copy loading report';b.onclick=openLoadingReport;recovery.append(b)}}).observe($('#frameArea'),{childList:true});
+
+// Prepare static classic scripts and stylesheets from the known CDN only.
+const gameAssetBlobs=new Set();
+function clearGameAssetBlobs(){for(const url of gameAssetBlobs)URL.revokeObjectURL(url);gameAssetBlobs.clear()}
+function absoluteGameCss(css,base){
+ return css.replace(/url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi,(match,quote,value)=>{
+  const path=value.trim();if(/^(?:data:|blob:|#)/i.test(path))return match;
+  try{return 'url('+JSON.stringify(new URL(path,base).href)+')'}catch{return match}
+ }).replace(/(@import\s+)(['"])([^'"]+)\2/gi,(match,prefix,quote,value)=>{
+  try{return prefix+JSON.stringify(new URL(value,base).href)}catch{return match}
+ });
+}
+async function repairGameAssetTypes(text,pageUrl,signal,seq){
+ const doc=new DOMParser().parseFromString(mirrorGameHtml(text),'text/html');
+ let base=pageUrl;
+ const baseElement=doc.querySelector('base[href]');
+ if(baseElement)base=new URL(baseElement.getAttribute('href'),pageUrl).href;
+ const resources=[...doc.querySelectorAll('script[src],link[rel~="stylesheet"][href]')];
+ const jobs=resources.filter(node=>{
+  const script=node.tagName==='SCRIPT',type=(node.getAttribute('type')||'').toLowerCase();
+  if(script&&type&&!/^(?:text|application)\/(?:java|ecma)script$/.test(type))return false;
+  try{const url=new URL(node.getAttribute(script?'src':'href'),base);return url.protocol==='https:'&&url.hostname==='cdn.bili33.top'&&url.pathname.startsWith('/gh/')}catch{return false}
+ });
+ if(!jobs.length)return text;
+ $('#loadStatus').textContent='PREPARING GAME FILES';
+ let next=0,changed=false,stopped=false;
+ const created=[];
+ try{
+  await Promise.all(Array.from({length:Math.min(4,jobs.length)},async()=>{
+   while(next<jobs.length){
+    const node=jobs[next++],script=node.tagName==='SCRIPT',attr=script?'src':'href';
+    const url=new URL(node.getAttribute(attr),base).href;
+    const response=await fetch(url,{signal,credentials:'omit',cache:'default'});
+    if(stopped||signal.aborted||seq!==launchSeq)throw new DOMException('Loading stopped','AbortError');
+    const type=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
+    recordLoadingEvent('asset-response',safeReportUrl(url)+' HTTP '+response.status+' '+type);
+    if(!response.ok)throw Error('Game file returned HTTP '+response.status+': '+safeReportUrl(url));
+    if(type!=='text/plain'){recordLoadingEvent('asset-unchanged',safeReportUrl(url));continue}
+    if(node.hasAttribute('integrity')){recordLoadingEvent('asset-unchanged','Integrity-protected asset: '+safeReportUrl(url));continue}
+    let body=await response.text();
+    if(stopped||signal.aborted||seq!==launchSeq)throw new DOMException('Loading stopped','AbortError');
+    if(/^\s*(?:<!doctype|<html|<head|<body)/i.test(body)||body.startsWith('version https://git-lfs'))throw Error('Game asset contains an error page or pointer: '+safeReportUrl(url));
+    if(!script)body=absoluteGameCss(body,response.url||url);
+    const blob=URL.createObjectURL(new Blob([body],{type:script?'text/javascript':'text/css'}));
+    created.push(blob);gameAssetBlobs.add(blob);node.setAttribute(attr,blob);changed=true;
+    recordLoadingEvent('asset-type-repaired',safeReportUrl(url)+' -> '+(script?'text/javascript':'text/css'));
+   }
+  }));
+  return changed?'<!doctype html>\n'+doc.documentElement.outerHTML:text;
+ }catch(error){stopped=true;for(const url of created){URL.revokeObjectURL(url);gameAssetBlobs.delete(url)}throw error}
+}
+$('#player').addEventListener('close',clearGameAssetBlobs);
 </script><dialog id="loadingReportDialog" aria-labelledby="loadingReportTitle"><h2 id="loadingReportTitle">Loading report</h2><p>Review this report before sharing. It includes your browser version, game file addresses without query strings, and available loading errors. Nothing is sent automatically.</p><textarea id="loadingReportText" readonly aria-label="Loading report" spellcheck="false"></textarea><p id="loadingReportCopyStatus" role="status"></p><div><button id="copyLoadingReport" class="primary">Copy report</button><button id="closeLoadingReport" class="quiet">Close</button></div></dialog></body></html>
 
