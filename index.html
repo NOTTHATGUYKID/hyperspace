@@ -427,7 +427,7 @@ function installGameDiagnostics(token){
 }
 addEventListener('message',e=>{const frame=$('#frameArea iframe');if(!frame||e.source!==frame.contentWindow||!e.data||e.data.token!==frameToken)return;if(e.data.type==='hyper-diagnostic')recordLoadingEvent(e.data.kind,e.data.detail);else if(e.data.type==='hyper-game-error')recordLoadingEvent('game-error',e.data.message)});
 new MutationObserver(()=>recordLoadingEvent('status',$('#loadStatus').textContent)).observe($('#loadStatus'),{childList:true,characterData:true,subtree:true});
-function loadingReportText(){return JSON.stringify({reportVersion:1,build:'startup-order-2026-10-22',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
+function loadingReportText(){return JSON.stringify({reportVersion:1,build:'sandbox-assets-2026-10-22',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
 function openLoadingReport(){const area=$('#loadingReportText');area.value=loadingReportText();$('#loadingReportCopyStatus').textContent='Tap Copy report, then paste it into this chat.';if(!$('#loadingReportDialog').open)$('#loadingReportDialog').showModal()}
 $('#loadingReport').onclick=openLoadingReport;
 $('#closeLoadingReport').onclick=()=>$('#loadingReportDialog').close();
@@ -444,6 +444,11 @@ function absoluteGameCss(css,base){
  }).replace(/(@import\s+)(['"])([^'"]+)\2/gi,(match,prefix,quote,value)=>{
   try{return prefix+JSON.stringify(new URL(value,base).href)}catch{return match}
  });
+}
+function gameAssetDataUrl(body,type){
+ const bytes=new TextEncoder().encode(body);let binary='';
+ for(let offset=0;offset<bytes.length;offset+=16384)binary+=String.fromCharCode(...bytes.subarray(offset,offset+16384));
+ return 'data:'+type+';base64,'+btoa(binary);
 }
 async function repairGameAssetTypes(text,pageUrl,signal,seq){
  const doc=new DOMParser().parseFromString(mirrorGameHtml(text),'text/html');
@@ -476,8 +481,9 @@ async function repairGameAssetTypes(text,pageUrl,signal,seq){
     if(stopped||signal.aborted||seq!==launchSeq)throw new DOMException('Loading stopped','AbortError');
     if(/^\s*(?:<!doctype|<html|<head|<body)/i.test(body)||body.startsWith('version https://git-lfs'))throw Error('Game asset contains an error page or pointer: '+safeReportUrl(url));
     if(!script)body=absoluteGameCss(body,response.url||url);
-    const blob=URL.createObjectURL(new Blob([body],{type:script?'text/javascript':'text/css'}));
-    created.push(blob);gameAssetBlobs.add(blob);node.setAttribute(attr,blob);changed=true;
+    const asset=gameAssetDataUrl(body,script?'text/javascript':'text/css');
+    node.setAttribute(attr,asset);changed=true;
+    recordLoadingEvent('asset-delivery','Self-contained '+(script?'script':'stylesheet')+' prepared');
     recordLoadingEvent('asset-type-repaired',safeReportUrl(url)+' -> '+(script?'text/javascript':'text/css'));
    }
   }));
