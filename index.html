@@ -168,7 +168,7 @@ function health(g,state,reason=''){gameHealth[g.id]={state,reason,at:Date.now()}
 function resetPlay(){clearGameAssetBlobs();playConfirmed=false;sessionToken=null;clearTimeout(loadTimer);gameAbort?.abort();gameAbort=null;lastTick=performance.now();$('#confirmPlay').disabled=false;$('#confirmPlay').textContent='Game is working — start timer';$('#sessionClock').textContent='Not timing yet';}
 function showLoadProblem(message){recordLoadingEvent("problem",message);if(!activeGame)return;playConfirmed=false;sessionToken=null;$('#instructions').textContent=message+' Retry, or choose an alternate version below.';health(activeGame,'failed',message);$('#loadStatus').textContent='NEEDS ATTENTION';showGameRecovery(message);$('#retryGame').hidden=false;$('#alternateGame').disabled=!getAlternates(activeGame).length;$('#confirmPlay').disabled=false;$('#confirmPlay').textContent='Game is working — start timer';$('#sessionClock').textContent='Not timing yet'}
 function getAlternates(g){return games.filter(x=>x.id!==g.id&&titleKey(x.title)===titleKey(g.title)&&!x.external).sort((a,b)=>(gameHealth[a.id]?.state==='failed')-(gameHealth[b.id]?.state==='failed'))}
-function htmlWrapper(text,url,token){text=mirrorGameHtml(text);url=mirrorGameUrl(url);const base=/<base\b[^>]*\bhref\s*=/i.test(text)?'':'<base href="'+url.replaceAll('"','%22')+'">';const script=`<script>(()=>{const token=${JSON.stringify(token)};(${installGameStorageFallback.toString()})();(${installGameDiagnostics.toString()})(token);(${installDynamicGameAssets.toString()})(token);addEventListener('error',e=>{parent.postMessage({type:'hyper-game-error',token,message:String(e.message||'A game script failed').slice(0,160)},'*')});addEventListener('unhandledrejection',()=>{parent.postMessage({type:'hyper-game-error',token,message:'A game resource failed'},'*')});addEventListener('load',()=>{parent.postMessage({type:'hyper-document-loaded',token},'*')})})();<\/script>`;return /<head[^>]*>/i.test(text)?text.replace(/<head[^>]*>/i,m=>m+base+script):base+script+text}
+function htmlWrapper(text,url,token){text=mirrorGameHtml(text);url=mirrorGameUrl(url);const base=/<base\b[^>]*\bhref\s*=/i.test(text)?'':'<base href="'+url.replaceAll('"','%22')+'">';const script=`<script>(()=>{const token=${JSON.stringify(token)};(${installGameStorageFallback.toString()})();(${installGameDiagnostics.toString()})(token);(${installOptionalGameFeatures.toString()})();(${installDynamicGameAssets.toString()})(token);addEventListener('error',e=>{parent.postMessage({type:'hyper-game-error',token,message:String(e.message||'A game script failed').slice(0,160)},'*')});addEventListener('unhandledrejection',()=>{parent.postMessage({type:'hyper-game-error',token,message:'A game resource failed'},'*')});addEventListener('load',()=>{parent.postMessage({type:'hyper-document-loaded',token},'*')})})();<\/script>`;return /<head[^>]*>/i.test(text)?text.replace(/<head[^>]*>/i,m=>m+base+script):base+script+text}
 
 const warmedGameOrigins=new Set();
 function warmGame(g){if(!g||g.offline||g.external||navigator.connection?.saveData)return;try{let url=mirrorGameUrl(g.url);const m=g.mode==='html'&&!bookmarkMode&&url.match(/^https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^@]+)@([^/]+)\/(.+)$/);if(m)url='https://raw.githack.com/'+m.slice(1).join('/');const origin=new URL(url).origin;if(warmedGameOrigins.has(origin)||warmedGameOrigins.size>=8)return;warmedGameOrigins.add(origin);const link=document.createElement('link');link.rel='preconnect';link.href=origin;document.head.append(link)}catch{}}
@@ -427,7 +427,7 @@ function installGameDiagnostics(token){
 }
 addEventListener('message',e=>{const frame=$('#frameArea iframe');if(!frame||e.source!==frame.contentWindow||!e.data||e.data.token!==frameToken)return;if(e.data.type==='hyper-diagnostic')recordLoadingEvent(e.data.kind,e.data.detail);else if(e.data.type==='hyper-game-error')recordLoadingEvent('game-error',e.data.message)});
 new MutationObserver(()=>recordLoadingEvent('status',$('#loadStatus').textContent)).observe($('#loadStatus'),{childList:true,characterData:true,subtree:true});
-function loadingReportText(){return JSON.stringify({reportVersion:1,build:'dynamic-assets-2026-10-22',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
+function loadingReportText(){return JSON.stringify({reportVersion:1,build:'controller-fallback-2026-10-22',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
 function openLoadingReport(){const area=$('#loadingReportText');area.value=loadingReportText();$('#loadingReportCopyStatus').textContent='Tap Copy report, then paste it into this chat.';if(!$('#loadingReportDialog').open)$('#loadingReportDialog').showModal()}
 $('#loadingReport').onclick=openLoadingReport;
 $('#closeLoadingReport').onclick=()=>$('#loadingReportDialog').close();
@@ -497,24 +497,31 @@ function installDynamicGameAssets(token){
  const prepared=new WeakSet();
  const report=(kind,detail)=>parent.postMessage({type:'hyper-diagnostic',token,kind,detail},'*');
  function prepare(node){
-  if(!node||node.nodeType!==1||node.tagName!=='SCRIPT'||prepared.has(node)||!node.hasAttribute('src')||node.hasAttribute('integrity'))return;
+  if(!node||node.nodeType!==1||prepared.has(node)||node.hasAttribute('integrity'))return; const script=node.tagName==='SCRIPT',style=node.tagName==='LINK'&&(node.getAttribute('rel')||'').split(/\s+/).includes('stylesheet');if(!script&&!style)return;const attr=script?'src':'href';if(!node.hasAttribute(attr))return;
   const type=(node.getAttribute('type')||'').toLowerCase();
-  if(type&&!/^(?:text|application)\/(?:java|ecma)script$/.test(type))return;
-  let url;try{url=new URL(node.getAttribute('src'),document.baseURI)}catch{return}
+  if(script&&type&&!/^(?:text|application)\/(?:java|ecma)script$/.test(type))return;
+  let url;try{url=new URL(node.getAttribute(attr),document.baseURI)}catch{return}
   if(url.protocol!=='https:'||url.hostname!=='cdn.bili33.top'||!url.pathname.startsWith('/gh/'))return;
-  prepared.add(node);node.removeAttribute('src');
+  prepared.add(node);node.removeAttribute(attr);
   const safe=url.origin+url.pathname;
   report('chunk-request',safe);
   fetch(url.href,{credentials:'omit',cache:'default'}).then(async response=>{
    const mime=(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
    report('chunk-response',safe+' HTTP '+response.status+' '+mime);
    if(!response.ok)throw Error('Chunk returned HTTP '+response.status);
-   if(mime!=='text/plain'){node.setAttribute('src',url.href);return}
-   const body=await response.text();
+   if(mime!=='text/plain'){node.setAttribute(attr,url.href);return}
+   let body=await response.text();
    if(/^\s*(?:<!doctype|<html|<head|<body)/i.test(body)||body.startsWith('version https://git-lfs'))throw Error('Chunk contains an error page or pointer');
-   const bytes=new TextEncoder().encode(body);let binary='';
+   if(style)body=(function absoluteGameCss(css,base){
+ return css.replace(/url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi,(match,quote,value)=>{
+  const path=value.trim();if(/^(?:data:|blob:|#)/i.test(path))return match;
+  try{return 'url('+JSON.stringify(new URL(path,base).href)+')'}catch{return match}
+ }).replace(/(@import\s+)(['"])([^'"]+)\2/gi,(match,prefix,quote,value)=>{
+  try{return prefix+JSON.stringify(new URL(value,base).href)}catch{return match}
+ });
+})(body,response.url||url.href); const bytes=new TextEncoder().encode(body);let binary='';
    for(let i=0;i<bytes.length;i+=16384)binary+=String.fromCharCode(...bytes.subarray(i,i+16384));
-   node.setAttribute('src','data:text/javascript;base64,'+btoa(binary));
+   node.setAttribute(attr,'data:'+(script?'text/javascript':'text/css')+';base64,'+btoa(binary));
    report('chunk-type-repaired',safe);
   }).catch(error=>{report('chunk-error',safe+' '+error.message);node.dispatchEvent(new Event('error'))});
  }
@@ -523,5 +530,6 @@ function installDynamicGameAssets(token){
   Node.prototype[method]=function(node,...args){prepare(node);return original.call(this,node,...args)};
  }
 }
-</script></body></html>
+
+function installOptionalGameFeatures(){for(const name of ['getGamepads','webkitGetGamepads']){const original=navigator[name];if(typeof original!=='function')continue;try{Object.defineProperty(navigator,name,{configurable:true,value:function(...args){try{return original.apply(navigator,args)}catch(e){if(e.name==='SecurityError'||e.name==='NotAllowedError')return [];throw e}}})}catch{}}}</script></body></html>
 
