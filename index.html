@@ -376,21 +376,7 @@ function tryNextGameVersion(){
 }
 function showGameRecovery(message){
  $('#gameRecovery')?.remove();
- const box=document.createElement('section');box.id='gameRecovery';
- box.setAttribute('role','status');
- const heading=document.createElement('h2');heading.textContent='Game has not started';
- const note=document.createElement('p');note.textContent=message;
- const detail=document.createElement('p');
- detail.textContent=activeGame?.offline?'This copy is included in the download.':'This game needs files from its provider. A blank frame does not tell us whether the cause is filtering, embedding rules, or a game error.';
- const actions=document.createElement('div');
- function button(label,fn){const b=document.createElement('button');b.className='quiet';b.textContent=label;b.onclick=fn;actions.append(b);return b}
- button('Retry',()=>activeGame&&launch(activeGame));
- const next=nextGameVersion();
- if(next)button('Try another version',tryNextGameVersion);
- if(activeGame?.mode==='html')button('Try compatibility loader',()=>launch(activeGame,true));
- button('Keep waiting',()=>box.remove());
- button('Back to games',()=>$('#player').close());
- box.append(heading,note,detail,actions);$('#frameArea').append(box);
+ $('#instructions').textContent=message;
 }
 
 function mirrorGameUrl(value){
@@ -427,7 +413,7 @@ function installGameDiagnostics(token){
 }
 addEventListener('message',e=>{const frame=$('#frameArea iframe');if(!frame||e.source!==frame.contentWindow||!e.data||e.data.token!==frameToken)return;if(e.data.type==='hyper-diagnostic')recordLoadingEvent(e.data.kind,e.data.detail);else if(e.data.type==='hyper-game-error')recordLoadingEvent('game-error',e.data.message)});
 new MutationObserver(()=>recordLoadingEvent('status',$('#loadStatus').textContent)).observe($('#loadStatus'),{childList:true,characterData:true,subtree:true});
-function loadingReportText(){return JSON.stringify({reportVersion:1,build:'controller-fallback-2026-10-22',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
+function loadingReportText(){return JSON.stringify({reportVersion:1,build:'no-error-overlays-2026-10-23',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
 function openLoadingReport(){const area=$('#loadingReportText');area.value=loadingReportText();$('#loadingReportCopyStatus').textContent='Tap Copy report, then paste it into this chat.';if(!$('#loadingReportDialog').open)$('#loadingReportDialog').showModal()}
 $('#loadingReport').onclick=openLoadingReport;
 $('#closeLoadingReport').onclick=()=>$('#loadingReportDialog').close();
