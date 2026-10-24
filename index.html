@@ -412,11 +412,17 @@ function installGameDiagnostics(token){
  addEventListener('unhandledrejection',e=>send('promise-error',e.reason?.message||'Unhandled promise rejection'));
  addEventListener('DOMContentLoaded',()=>send('dom-ready','Game document parsed'));
  addEventListener('load',()=>send('window-load','Game document load event'));
+ const originalFetch=window.fetch;
+ window.fetch=function(input,init){
+  let safe='';try{const url=new URL(typeof input==='string'?input:input.url,document.baseURI);if(/\.(?:wasm|unityweb)(?:$|\.)/.test(url.pathname))safe=url.origin+url.pathname}catch{}
+  if(safe)send('binary-request',safe);
+  return originalFetch.call(this,input,init).then(response=>{if(safe)send('binary-response',safe+' HTTP '+response.status+' '+(response.headers.get('content-type')||''));return response},error=>{if(safe)send('binary-error',safe+' '+error.name);throw error});
+ };
  send('diagnostics-started','Game error listener installed');
 }
 addEventListener('message',e=>{const frame=$('#frameArea iframe');if(!frame||e.source!==frame.contentWindow||!e.data||e.data.token!==frameToken)return;if(e.data.type==='hyper-diagnostic')recordLoadingEvent(e.data.kind,e.data.detail);else if(e.data.type==='hyper-game-error')recordLoadingEvent('game-error',e.data.message)});
 new MutationObserver(()=>recordLoadingEvent('status',$('#loadStatus').textContent)).observe($('#loadStatus'),{childList:true,characterData:true,subtree:true});
-function loadingReportText(){return JSON.stringify({reportVersion:1,build:'unity-base-2026-10-23',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
+function loadingReportText(){return JSON.stringify({reportVersion:1,build:'physics-url-2026-10-24',created:new Date().toISOString(),browser:navigator.userAgent,bookmark:bookmarkMode,onlineHint:navigator.onLine,secureContext:window.isSecureContext,viewport:{width:innerWidth,height:innerHeight},game:loadingGame,status:$('#loadStatus').textContent,events:loadingEvents,limitations:'Cross-origin frames may hide errors. Load events do not prove gameplay. Network status does not prove provider access. URLs omit query strings and fragments. No passwords, cookies or session tokens are included.'},null,2)}
 function openLoadingReport(){const area=$('#loadingReportText');area.value=loadingReportText();$('#loadingReportCopyStatus').textContent='Tap Copy report, then paste it into this chat.';if(!$('#loadingReportDialog').open)$('#loadingReportDialog').showModal()}
 $('#loadingReport').onclick=openLoadingReport;
 $('#closeLoadingReport').onclick=()=>$('#loadingReportDialog').close();
@@ -533,10 +539,18 @@ async function preparePolyTrackWorker(html,pageUrl,signal){
  const [worker,ammo]=await Promise.all([source('simulation_worker.bundle.js'),source('lib/ammo.wasm.js')]);
  const dependency='importScripts("replacethisplease"+"lib/ammo.wasm.js");';
  if(!worker.includes(dependency))throw Error('Poly Track physics worker changed; compatibility repair needs updating.');
- const patched=worker.replace(dependency,()=> 'importScripts('+JSON.stringify(gameAssetDataUrl(ammo,'text/javascript'))+');').replaceAll('replacethisplease',base);
+ const repairedAmmo=repairPolyTrackAmmo(ammo);
+ const patched=worker.replace(dependency,()=> 'importScripts('+JSON.stringify(gameAssetDataUrl(repairedAmmo,'text/javascript'))+');').replaceAll('replacethisplease',base);
  const serialized=JSON.stringify(patched).replace(/</g,'\\u003c');
  recordLoadingEvent('physics-prepared','Physics worker and Ammo script prepared before game startup');
  return html.replace(loader,()=> 'window.simulationworker=URL.createObjectURL(new Blob(['+serialized+'],{type:"application/javascript"}));');
+}
+
+function repairPolyTrackAmmo(ammo){
+ const locate='O = n.locateFile ? n.locateFile(L, u) : u + L';
+ const streaming='fetch(self.jkdfgnjkndfg+n,';
+ if(!ammo.includes(locate)||!ammo.includes(streaming))throw Error('Poly Track physics URL layout changed.');
+ return ammo.replace(locate,'O = n.locateFile ? n.locateFile(L, u) : new URL(L,self.jkdfgnjkndfg).href').replace(streaming,'fetch(n,');
 }
 
 function repairUnityBaseUrl(body){return body.replace(/new URL\(([$\w]+\.streamingAssetsUrl),\s*document\.URL\)/g,'new URL($1,document.baseURI)')}</script></body></html>
